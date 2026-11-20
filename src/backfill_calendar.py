@@ -38,8 +38,27 @@ MAX_BACKFILL_PAGES = 10
 RAW_DIR = Path.home() / "luma-backfill-raw"
 
 
+MEMBERS_ONLY_MARKER = "This is a members-only calendar."
+
+
 class StopBackfill(Exception):
     """Arrêt volontaire : Luma refuse ou le réseau échoue. Pas de retry."""
+
+    def __init__(self, message: str, code: int | None = None):
+        super().__init__(message)
+        self.code = code
+
+
+def has_members_only_marker(html: str) -> bool:
+    """Vrai si la page du calendrier indique qu'il est réservé aux membres (HTML rendu côté serveur)."""
+    return MEMBERS_ONLY_MARKER in html
+
+
+def is_members_only(calendar_url: str) -> bool:
+    """1 requête vers la page publique du calendrier."""
+    request = urllib.request.Request(calendar_url, headers={"User-Agent": config.USER_AGENT})
+    with urllib.request.urlopen(request, timeout=config.REQUEST_TIMEOUT) as response:
+        return has_members_only_marker(response.read().decode("utf-8", errors="replace"))
 
 
 def fetch_calendar_page(calendar_id: str, period: str, cursor: str | None, page_no: int) -> dict:
@@ -56,8 +75,8 @@ def fetch_calendar_page(calendar_id: str, period: str, cursor: str | None, page_
             body = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         if exc.code in (403, 429):
-            raise StopBackfill(f"HTTP {exc.code} sur {period} page {page_no} : arrêt immédiat") from exc
-        raise StopBackfill(f"HTTP {exc.code} sur {period} page {page_no}") from exc
+            raise StopBackfill(f"HTTP {exc.code} sur {period} page {page_no} : arrêt immédiat", exc.code) from exc
+        raise StopBackfill(f"HTTP {exc.code} sur {period} page {page_no}", exc.code) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
         raise StopBackfill(f"erreur réseau sur {period} page {page_no} : {exc}") from exc
 

@@ -36,6 +36,7 @@ CALENDAR_MASTER_FILE = config.CALENDAR_MASTER_FILE
 CALENDAR_FIELDNAMES = ["nom", "url", "calendar_api_id", "backfilled"]
 BACKFILL_NO = "Non"
 BACKFILL_YES = "Oui"
+BACKFILL_MEMBERS = "Membres"
 CALENDAR_URL_PREFIX = "https://lu.ma/"
 
 

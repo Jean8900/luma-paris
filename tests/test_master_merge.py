@@ -60,3 +60,16 @@ class MergeRowsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MembersOnlyTest(unittest.TestCase):
+    def test_marqueur_membres_detecte(self):
+        import backfill_calendar
+        html = "<h3>This is a members-only calendar.</h3>"
+        self.assertTrue(backfill_calendar.has_members_only_marker(html))
+        self.assertFalse(backfill_calendar.has_members_only_marker("<h1>AI Salon</h1>"))
+
+    def test_stopbackfill_porte_le_code(self):
+        import backfill_calendar
+        exc = backfill_calendar.StopBackfill("HTTP 401", 401)
+        self.assertEqual(exc.code, 401)

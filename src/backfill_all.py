@@ -61,17 +61,25 @@ def run(write: bool, run_date: date) -> int:
 
     incoming: list[dict] = []
     done: set[str] = set()
-    try:
-        for cal in calendars:
-            if not cal["calendar_api_id"] or cal.get("backfilled") == calendar_discover.BACKFILL_YES:
-                continue
-            log.info("Backfill : %s (%s)", cal["nom"], cal["calendar_api_id"])
+    for cal in calendars:
+        if not cal["calendar_api_id"] or cal.get("backfilled") in (
+            calendar_discover.BACKFILL_YES,
+            calendar_discover.BACKFILL_MEMBERS,
+        ):
+            continue
+        log.info("Backfill : %s (%s)", cal["nom"], cal["calendar_api_id"])
+        try:
             events = backfill_calendar.backfill_calendar(cal["calendar_api_id"])
-            incoming.extend(scraper.event_to_row(e, scraper.first_seen_value(run_date)) for e in events)
-            done.add(cal["calendar_api_id"])
-            log.info("  %d événements", len(events))
-    except backfill_calendar.StopBackfill as exc:
-        log.error("Arrêt : %s. Les calendriers restants resteront à faire.", exc)
+        except backfill_calendar.StopBackfill as exc:
+            if exc.code == 401 and backfill_calendar.is_members_only(cal["url"]):
+                cal["backfilled"] = calendar_discover.BACKFILL_MEMBERS
+                log.warning("%s : réservé aux membres, ignoré (marqué Membres)", cal["nom"])
+                continue
+            log.error("Arrêt : %s. Les calendriers restants resteront à faire.", exc)
+            break
+        incoming.extend(scraper.event_to_row(e, scraper.first_seen_value(run_date)) for e in events)
+        done.add(cal["calendar_api_id"])
+        log.info("  %d événements", len(events))
 
     master = master_merge.load_master()
     master, added = master_merge.merge_rows(master, incoming)
