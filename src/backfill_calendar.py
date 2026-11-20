@@ -10,7 +10,6 @@ Le lancement quotidien (nouveaux calendriers seulement) est dans daily_update.py
 Garde-fous :
 - une seule requête à la fois, pause aléatoire entre chaque requête (config.REQUEST_DELAY_*)
 - arrêt immédiat sur HTTP 403 / 429 ou erreur réseau : pas de retry, pour ne pas insister
-- nombre de pages borné par période (MAX_BACKFILL_PAGES)
 - JSON brut sauvegardé hors dépôt (RAW_DIR/<calendar_api_id>), données personnelles incluses
 """
 
@@ -34,7 +33,6 @@ log = logging.getLogger("backfill")
 CALENDAR_ENDPOINT = "https://api.luma.com/calendar/get-items"
 PERIODS = ("past", "future")
 
-MAX_BACKFILL_PAGES = 10
 RAW_DIR = Path.home() / "luma-backfill-raw"
 
 
@@ -90,7 +88,9 @@ def fetch_calendar_page(calendar_id: str, period: str, cursor: str | None, page_
 def collect_period(calendar_id: str, period: str) -> list[dict]:
     entries: list[dict] = []
     cursor: str | None = None
-    for page_no in range(1, MAX_BACKFILL_PAGES + 1):
+    page_no = 0
+    while True:
+        page_no += 1
         payload = fetch_calendar_page(calendar_id, period, cursor, page_no)
         page_entries = scraper.extract_entries(payload)
         entries.extend(page_entries)
@@ -101,9 +101,6 @@ def collect_period(calendar_id: str, period: str) -> list[dict]:
         if not cursor or not has_more:
             return entries
         time.sleep(random.uniform(config.REQUEST_DELAY_MIN, config.REQUEST_DELAY_MAX))
-
-    log.warning("Limite de %d pages atteinte pour %s : résultats possiblement incomplets", MAX_BACKFILL_PAGES, period)
-    return entries
 
 
 def build_events(entries: list[dict]) -> list[scraper.Event]:
