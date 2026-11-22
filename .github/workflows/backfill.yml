@@ -2,7 +2,7 @@ name: Daily Luma Backfill
 
 on:
   schedule:
-    - cron: "0 10 * * *"   # 10:00 UTC = 11:00 Paris (heure d'hiver)
+    - cron: "0 9 * * *"   # 09:00 UTC = 10:00 Paris (heure d'hiver), 1 h après le scrape à 9h
   workflow_dispatch:
 
 permissions:
