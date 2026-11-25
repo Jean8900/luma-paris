@@ -16,7 +16,7 @@ import re
 import sys
 import time
 import urllib.request
-from datetime import date
+from datetime import date, datetime, timezone
 
 import backfill_calendar
 import calendar_discover
@@ -61,25 +61,57 @@ def run(write: bool, run_date: date) -> int:
 
     incoming: list[dict] = []
     done: set[str] = set()
-    for cal in calendars:
-        if not cal["calendar_api_id"] or cal.get("backfilled") in (
+    timings: list[dict] = []
+    pending = [
+        c for c in calendars
+        if c["calendar_api_id"] and c.get("backfilled") not in (
             calendar_discover.BACKFILL_YES,
             calendar_discover.BACKFILL_MEMBERS,
-        ):
-            continue
-        log.info("Backfill : %s (%s)", cal["nom"], cal["calendar_api_id"])
+        )
+    ]
+    log.info("Calendriers à backfiller : %d", len(pending))
+
+    def record(n: int, cal: dict, started: float, status: str, events: int = 0) -> None:
+        seconds = time.monotonic() - started
+        timings.append({
+            "n": n, "nom": cal["nom"], "id": cal["calendar_api_id"], "url": cal["url"],
+            "secondes": seconds, "evenements": events, "statut": status,
+            "heure_utc": started_at[n],
+        })
+        log.info("  → %s | %.1f s | %d événements | %s", cal["nom"], seconds, events, status)
+
+    started_at: dict[int, str] = {}
+    for n, cal in enumerate(pending, start=1):
+        started = time.monotonic()
+        started_at[n] = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        log.info("[%d/%d] %s | %s | %s | %s", n, len(pending), started_at[n],
+                 cal["nom"], cal["calendar_api_id"], cal["url"])
         try:
             events = backfill_calendar.backfill_calendar(cal["calendar_api_id"])
         except backfill_calendar.StopBackfill as exc:
             if exc.code == 401 and backfill_calendar.is_members_only(cal["url"]):
                 cal["backfilled"] = calendar_discover.BACKFILL_MEMBERS
-                log.warning("%s : réservé aux membres, ignoré (marqué Membres)", cal["nom"])
+                record(n, cal, started, "membres (401 + marqueur)")
                 continue
+            record(n, cal, started, f"arrêt : {exc}")
             log.error("Arrêt : %s. Les calendriers restants resteront à faire.", exc)
             break
         incoming.extend(scraper.event_to_row(e, scraper.first_seen_value(run_date)) for e in events)
         done.add(cal["calendar_api_id"])
-        log.info("  %d événements", len(events))
+        record(n, cal, started, "ok", len(events))
+
+    if timings:
+        log.info("=== TIMELINE (ordre d'exécution) ===")
+        for t in timings:
+            log.info("%3d | %s | %8.1f s | %5d ev | %-30s | %s | %s | %s",
+                     t["n"], t["heure_utc"], t["secondes"], t["evenements"], t["nom"][:30],
+                     t["id"], t["statut"], t["url"])
+        log.info("=== CLASSEMENT : 15 calendriers les plus longs ===")
+        for rank, t in enumerate(sorted(timings, key=lambda x: -x["secondes"])[:15], start=1):
+            log.info("%2d. %8.1f s | %-30s | %s | %s | %s",
+                     rank, t["secondes"], t["nom"][:30], t["id"], t["statut"], t["url"])
+        total = sum(t["secondes"] for t in timings)
+        log.info("Total : %d calendriers, %.1f s (%.1f min)", len(timings), total, total / 60)
 
     master = master_merge.load_master()
     master, added = master_merge.merge_rows(master, incoming)
