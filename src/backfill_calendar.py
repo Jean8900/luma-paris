@@ -66,7 +66,8 @@ def is_members_only(calendar_url: str) -> bool:
 def fetch_calendar_page(calendar_id: str, period: str, cursor: str | None, page_no: int) -> dict:
     params = {"calendar_api_id": calendar_id, "period": period}
     if cursor:
-        params["next_cursor"] = cursor
+        # Le paramètre attendu est pagination_cursor (testé : next_cursor renvoie toujours la page 1).
+        params["pagination_cursor"] = cursor
     url = f"{CALENDAR_ENDPOINT}?{urllib.parse.urlencode(params)}"
     request = urllib.request.Request(
         url,
