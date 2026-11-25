@@ -22,17 +22,25 @@ jobs:
           python-version: "3.12"
 
       - name: Discover et backfill des nouveaux calendriers
-        run: python src/daily_update.py --write
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p logs
+          python src/daily_update.py --write 2>&1 | tee "logs/$(date -u +%F)_discover.txt"
 
       - name: Backfill des calendriers non backfillés
-        run: python src/backfill_all.py --write
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p logs
+          python src/backfill_all.py --write 2>&1 | tee "logs/$(date -u +%F)_backfill.txt"
 
-      - name: Commit des fichiers de données
+      - name: Commit des fichiers de données et des logs
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f data/ charts/ 2>/dev/null || true
+          git add -f data/ charts/ logs/ 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "Aucun changement dans les fichiers de données"
           else
