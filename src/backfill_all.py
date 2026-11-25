@@ -87,7 +87,10 @@ def run(write: bool, run_date: date) -> int:
         log.info("[%d/%d] %s | %s | %s | %s", n, len(pending), started_at[n],
                  cal["nom"], cal["calendar_api_id"], cal["url"])
         try:
-            events = backfill_calendar.backfill_calendar(cal["calendar_api_id"])
+            events = backfill_calendar.backfill_calendar(cal["calendar_api_id"], config.CALENDAR_TIME_BUDGET_S)
+        except backfill_calendar.CalendarTimeout as exc:
+            record(n, cal, started, f"timeout : {exc}")
+            continue
         except backfill_calendar.StopBackfill as exc:
             if exc.code == 401 and backfill_calendar.is_members_only(cal["url"]):
                 cal["backfilled"] = calendar_discover.BACKFILL_MEMBERS

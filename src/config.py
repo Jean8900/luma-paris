@@ -18,6 +18,9 @@ REQUEST_DELAY_MAX = 5.0
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 2.0
 REQUEST_TIMEOUT = 30
+# Backfill : temps maximum par calendrier (secondes). Au-delà, le calendrier est abandonné pour ce run
+# (statut « timeout », pas marqué Oui) et le backfill passe au suivant. Un run dure au plus N × cette valeur.
+CALENDAR_TIME_BUDGET_S = 30
 
 API_BASE_URL = "https://api.luma.com/discover/get-paginated-events"
 USER_AGENT = "luma-event-scraper/0.1"

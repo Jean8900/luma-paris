@@ -47,6 +47,10 @@ class StopBackfill(Exception):
         self.code = code
 
 
+class CalendarTimeout(Exception):
+    """Budget de temps du calendrier dépassé : ce calendrier est abandonné, le backfill continue."""
+
+
 def has_members_only_marker(html: str) -> bool:
     """Vrai si la page du calendrier indique qu'il est réservé aux membres (HTML rendu côté serveur)."""
     return MEMBERS_ONLY_MARKER in html
@@ -85,12 +89,18 @@ def fetch_calendar_page(calendar_id: str, period: str, cursor: str | None, page_
     return payload
 
 
-def collect_period(calendar_id: str, period: str) -> list[dict]:
+def _check_deadline(deadline: float | None, budget_s: float | None, where: str) -> None:
+    if deadline is not None and time.monotonic() > deadline:
+        raise CalendarTimeout(f"budget de {budget_s:g} s dépassé ({where})")
+
+
+def collect_period(calendar_id: str, period: str, deadline: float | None = None, budget_s: float | None = None) -> list[dict]:
     entries: list[dict] = []
     cursor: str | None = None
     page_no = 0
     while True:
         page_no += 1
+        _check_deadline(deadline, budget_s, f"{period} page {page_no}")
         payload = fetch_calendar_page(calendar_id, period, cursor, page_no)
         page_entries = scraper.extract_entries(payload)
         entries.extend(page_entries)
@@ -116,11 +126,13 @@ def build_events(entries: list[dict]) -> list[scraper.Event]:
     return scraper.dedupe_events(events)
 
 
-def backfill_calendar(calendar_api_id: str) -> list[scraper.Event]:
-    """Passé + futur d'un calendrier. Lève StopBackfill si Luma refuse ou si le réseau échoue."""
+def backfill_calendar(calendar_api_id: str, budget_s: float | None = None) -> list[scraper.Event]:
+    """Passé + futur d'un calendrier. Lève StopBackfill si Luma refuse ou si le réseau échoue,
+    CalendarTimeout si budget_s secondes sont écoulées (vérifié avant chaque requête)."""
+    deadline = time.monotonic() + budget_s if budget_s else None
     entries: list[dict] = []
     for period in PERIODS:
-        entries.extend(collect_period(calendar_api_id, period))
+        entries.extend(collect_period(calendar_api_id, period, deadline, budget_s))
         time.sleep(random.uniform(config.REQUEST_DELAY_MIN, config.REQUEST_DELAY_MAX))
     return build_events(entries)
 
